@@ -1,0 +1,3 @@
+*.pyc
+omero_vitessce.egg-info/*
+.DS_Store

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<!-- From https://github.com/imjoy-team/imjoy-core/blob/master/src/core-example.html -->
+<html lang="en">
+
+<head>
+    <title>OMERO-ImJoy</title>
+
+    <meta charset="utf-8" />
+    <meta name="viewport"
+        content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="description" content="ImJoy -- Deep Learning Made Easy!" />
+    <meta name="author" content="Wei OUYANG" />
+    <meta name="keywords" content="Bioimaging, image processing" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@weioyang" />
+    <meta name="twitter:creator" content="@weioyang" />
+    <meta name="twitter:image" content="https://imjoy.io/static/img/imjoy-card-plain.png" />
+    <meta property="og:url" content="https://imjoy.io" />
+    <meta property="og:title" content="ImJoy" />
+    <meta property="og:description" content="ImJoy -- Deep Learning Made Easy!" />
+    <meta property="og:image" content="https://imjoy.io/static/img/imjoy-card-plain.png" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="apple-touch-icon" sizes="57x57" href="https://imjoy.io/static/icons/apple-icon-57x57.png" />
+    <link rel="apple-touch-icon" sizes="60x60" href="https://imjoy.io/static/icons/apple-icon-60x60.png" />
+    <link rel="apple-touch-icon" sizes="72x72" href="https://imjoy.io/static/icons/apple-icon-72x72.png" />
+    <link rel="apple-touch-icon" sizes="76x76" href="https://imjoy.io/static/icons/apple-icon-76x76.png" />
+    <link rel="apple-touch-icon" sizes="114x114" href="https://imjoy.io/static/icons/apple-icon-114x114.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="https://imjoy.io/static/icons/apple-icon-120x120.png" />
+    <link rel="apple-touch-icon" sizes="144x144" href="https://imjoy.io/static/icons/apple-icon-144x144.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="https://imjoy.io/static/icons/apple-icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="https://imjoy.io/static/icons/apple-icon-180x180.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="https://imjoy.io/static/icons/android-icon-192x192.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="https://imjoy.io/static/icons/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="https://imjoy.io/static/icons/favicon-96x96.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="https://imjoy.io/static/icons/favicon-16x16.png" />
+    <link rel="shortcut icon" href="static/icons/favicon.ico" type="image/x-icon" />
+    <link rel="icon" href="static/icons/favicon.ico" type="image/x-icon" />
+    <link rel="apple-touch-startup-image" href="/launch.png" />
+    <link rel="manifest" href="manifest.json" />
+    <meta name="msapplication-TileColor" content="#f5f9ff" />
+    <meta name="msapplication-TileImage" content="static/icons/ms-icon-144x144.png" />
+    <meta name="theme-color" content="#f5f9ff" />
+
+    <script src="https://lib.imjoy.io/imjoy-loader.js"></script>
+
+    <!-- Relative links allows testing without Django -->
+    <!-- When served by Django, the URLs will be updated -->
+    <script src="../../static/omero_imjoy/util.js"></script>
+    <link rel="stylesheet" href="../../static/omero_imjoy/imjoy.css">
+</head>
+
+<body style="height: 100vh;">
+    <div id="window-container" style="height: calc( 100% - 30px);"></div>
+    <div id="menu-container"></div>
+    <script>
+
+        async function getStore() {
+            const url = 'https://unpkg.com/@manzt/zarr-lite/httpStore.js';
+            const {
+                default: HTTPStore
+            } = await import(url);
+            return HTTPStore;
+        }
+
+        const builtinPlugins = [
+            "https://gist.githubusercontent.com/oeway/9c78d23c101f468e723888d05b6fac6d/raw/ImageJScriptEditor.imjoy.html",
+            "https://gist.githubusercontent.com/oeway/c9592f23c7ee147085f0504d2f3e993a/raw/CellPose-ImageJ.imjoy.html",
+            "https://gist.githubusercontent.com/oeway/e5c980fbf6582f25fde795262a7e33ec/raw/itk-vtk-viewer-imagej.imjoy.html"
+        ];
+
+        document.addEventListener("DOMContentLoaded", async event => {
+            const app = await imjoyLoader.loadImJoyBasicApp({
+                version: "0.13.71", // pin the version of imjoy-core
+                process_url_query: true,
+                show_window_title: false,
+                show_progress_bar: true,
+                show_empty_window: true,
+                menu_style: { position: "absolute", right: 0, top: "2px" },
+                window_style: {width: '100%', height: '100%'},
+                main_container: null,
+                menu_container: "menu-container",
+                window_manager_container: "window-container",
+                window_manager_type: "simple",
+                imjoy_api: { } // override some imjoy API functions here
+            })
+            const api = app.imjoy.api;
+
+            const zarr = await import('https://unpkg.com/@manzt/zarr-lite/index.js')
+            const HTTPStore = await getStore()
+
+            async function loadZarrImage(zarr_url) {
+
+                async function loadPyramid() {
+                    const store = new HTTPStore(zarr_url);
+                    const rootAttrs = await zarr.getJson(store, '.zattrs');
+                    console.log('rootAttrs', rootAttrs);
+                    let paths = [];
+                    if ('multiscales' in rootAttrs) {
+                        const {
+                            datasets
+                        } = rootAttrs.multiscales[0];
+                        paths = datasets.map(d => d.path);
+                    }
+                    const p = paths.map(path => zarr.openArray({
+                        store,
+                        path
+                    }));
+                    return Promise.all(p);
+                }
+
+                const pyramid = await loadPyramid();
+                const zarr_arr = pyramid[0]
+
+                console.log('zarr_arr', zarr_arr);
+                let [sizeT, sizeC, sizeZ, sizeY, sizeX] = zarr_arr.shape;
+
+                dtypes = {
+                    "|i1": "int8",
+                    "|u1": "uint8",
+                    "<i2": "int16",
+                    "<u2": "uint16",
+                    "<i4": "int32",
+                    "<u4": "uint32",
+                    "<f4": "float32",
+                    "<f8": "float64"
+                }
+                const dtype = dtypes[zarr_arr.dtype] || "uint16";
+                console.log('dtype', zarr_arr.dtype, dtype);
+
+
+                const totalPlanes = sizeC * sizeZ * sizeT;
+                let loadedPlanes = 0;
+
+                function notifyPlaneLoaded() {
+                    loadedPlanes += 1;
+                    api.showProgress(loadedPlanes/totalPlanes)
+                    api.showMessage(`Loading Image planes: ${loadedPlanes} / ${totalPlanes}`)
+                }
+
+                async function getRawChunk(zarrArray, chunk) {
+                    const data = await zarrArray.getRawChunk(chunk)
+                    notifyPlaneLoaded()
+                    return data;
+                }
+                // init ImageJ viewer
+                // we didn't add await here because we want to load image and the data simultaneously
+                const ijPromise = api.createWindow({ src: "https://ij.imjoy.io", name: "ImageJ.JS", fullscreen: true})
+
+                const zarrData = await Promise.all(
+                    range(sizeT).flatMap(t => {
+                        return (range(sizeC).flatMap(c => {
+                            return (range(sizeZ).map(z => {
+                                return getRawChunk(zarr_arr, [t, c, z, 0, 0])
+                            }))
+                        }))
+                    })
+                );
+
+                // hide the progress bar
+                await api.showProgress(0)
+                await api.showMessage(`Image planes loaded successfully.`)
+                console.log('zarrData', zarrData)
+
+                // merge planes into one array
+                const zarrPlanes = mergeArrays(zarrData.map(d => d.data));
+                console.log('zarrPlanes', zarrPlanes);
+
+                // now make sure ImageJ viewer is loaded
+                const ij = await ijPromise;
+
+                // encode the image data as an ndarray
+                await ij.viewImage({ _rtype: 'ndarray', _rdtype: dtype, _rshape: [sizeZ * sizeC * sizeT, sizeY, sizeX, 1], _rvalue: zarrPlanes.buffer });
+
+                await ij.runMacro(`run("Stack to Hyperstack...", "order=xyzct channels=${sizeC} slices=${sizeZ} frames=${sizeT} display=Grayscale");`)
+
+                // load built-in plugins
+                // note some plugins will require ImageJ.JS so we load them after ImageJ.JS
+                for (const p of builtinPlugins) {
+                    app.loadPlugin(p);
+                }
+            }
+
+
+            // Use ?image=1 to open an OMERO Image
+            const image_ids = getUrlParameterList("image");
+
+            if (image_ids.length > 0) {
+                const image_id = image_ids[0];
+                const zarr_url = `${ getBaseUrl() }/imjoy/zarr/${ image_id }/`
+                console.log('load', zarr_url);
+                loadZarrImage(zarr_url).then(()=>{
+                    api.showMessage("Image loaded successfully.")
+                }).catch((e)=>{
+                    api.alert(`Failed to load image, error: ${e}`)
+                });
+            } else {
+                const source = getUrlParameter('source');
+                if (source) {
+                    loadZarrImage(source);
+                }
+            }
+
+        });
+
+    </script>
+
+</body>
+
+</html>
