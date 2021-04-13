@@ -50,7 +50,7 @@
     X axis:
     <select name="x_axis">
         {% for col in columns %}            
-            {% ifequal col.type "DoubleColumn" %}
+            {% ifequal col.type "number" %}
             <option value="{{ col.name }}">
                 {{ col.name }}
             </option>
@@ -61,7 +61,7 @@
     Y axis:
     <select name="y_axis">
         {% for col in columns %}
-            {% ifequal col.type "DoubleColumn" %}
+            {% ifequal col.type "number" %}
             <option value="{{ col.name }}">
                 {{ col.name }}
             </option>

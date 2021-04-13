@@ -15,6 +15,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+import pandas as pd
+
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.core.urlresolvers import reverse
@@ -38,32 +40,45 @@ def index(request, conn=None, **kwargs):
 def omero_table(request, file_id, conn=None, **kwargs):
     """Shows the table columns, allowing user to pick"""
 
-    r = conn.getSharedResources()
-    table = r.openTable(OriginalFileI(file_id), conn.SERVICE_OPTS)
-    table_data = []
-    batch = 5
-    try:
-        # table_data = [{'name': col.name, 'rows': []} for col in table.getHeaders()]
-        res = table.slice(range(len(table_data)), range(batch))
+    sample_size = 5
+    orig_file = conn.getObject("originalfile", file_id)
+    file_name = orig_file.getName()
+    if file_name.endswith("csv"):
+        columns = []
+        rows = []
+        csvfile = orig_file.asFileObj()
+        df = pd.read_csv(csvfile)
 
-        # for row in range(0, batch):
-        #     for idx, col in enumerate(rows.columns):
-        #         table_data[idx]['rows'].append(col.values[row])
+        def col_type_str(coltype):
+            t = str(coltype)
+            return "number" if t.startswith('int') or t.startswith('float') else "string"
 
-        columns = [
-            {'name': col.name,
-             'type': col.__class__.__name__}
-             for col in table.getHeaders()
-        ]
-        rows = [
-            [col.values[row] for col in res.columns]
-            for row in range(0, len(res.rowNumbers))
-        ]
+        for name, col_type in zip(df.columns, df.dtypes):
+            columns.append({
+                'name': name, 'type': col_type_str(col_type)
+            })
+        for index, row in df.head(sample_size).iterrows():
+            rows.append(row)
+        csvfile.close()
+    else:
+        r = conn.getSharedResources()
+        table = r.openTable(OriginalFileI(file_id), conn.SERVICE_OPTS)
+        table_data = []
+        try:
+            res = table.slice(range(len(table_data)), range(sample_size))
+            columns = [
+                {'name': col.name,
+                'type': "number" if col.__class__.__name__ == "DoubleColumn" else "string"}
+                for col in table.getHeaders()
+            ]
+            rows = [
+                [col.values[row] for col in res.columns]
+                for row in range(0, len(res.rowNumbers))
+            ]
 
-    finally:
-        table.close()
+        finally:
+            table.close()
 
-    # return JsonResponse({'columns': columns, 'rows': rows})
     index_url = request.build_absolute_uri(reverse('vitessce_index'))
 
     template = "omero_vitessce/omero_table.html"
