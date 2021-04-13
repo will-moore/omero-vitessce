@@ -16,6 +16,8 @@
 #
 
 import pandas as pd
+from shapely.geometry import Polygon
+from omero_marshal import get_encoder
 
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
@@ -94,6 +96,42 @@ def omero_table(request, file_id, conn=None, **kwargs):
     return render(request, template, context)
 
 
+# >>> polygon = Polygon([(0, 0), (1, 1), (1, 0)])
+# >>> polygon.area
+# 0.5
+# >>> polygon.length
+# 3.4142135623730949
+# Its x-y bounding box is a (minx, miny, maxx, maxy) tuple.
+
+# >>> polygon.bounds
+# (0.0, 0.0, 1.0, 1.0)
+
+
+class VitessceShape():
+
+    def __init__(self, shape):
+        self.shape = self.toShapely(shape)
+
+    def toShapely(self, omero_shape):
+        encoder = get_encoder(omero_shape.__class__)
+        shape_json = encoder.encode(omero_shape)
+
+        if "Points" in shape_json:
+            xy = shape_json["Points"].split(" ")
+            coords = []
+            for coord in xy:
+                c = coord.split(",")
+                coords.append((float(c[0]), float(c[1])))
+            return Polygon(coords)
+
+    def xy(self):
+        return list(self.shape.centroid.coords)[0]
+
+    def poly(self):
+        # Use 2 to get e.g. 8 points from 56.
+        return list(self.shape.simplify(2).exterior.coords)
+
+
 @login_required()
 def vitessce_cells(request, fileid, col1, col2, conn=None, **kwargs):
     """
@@ -140,12 +178,31 @@ def vitessce_cells(request, fileid, col1, col2, conn=None, **kwargs):
     #         id_column = col_names.index(dtype)
     #         break
 
+    id_column = None
+    if "shape_id" in col_names:
+        id_column = col_names.index("shape_id")
+
     rv = {}
 
+    shape_ids = []
+
     for count, row in enumerate(rows):
-        # row_id = row[id_column]
+        if id_column is not None:
+            row_key = str(row[id_column])
+            shape_ids.append(row[id_column])
+        else:
+            row_key = "cell_%s" % (count + 1)
         val1 = row[col1_index]
         val2 = row[col2_index]
-        rv["cell_%s" % (count + 1)] = {"mappings": {"UMAP": [val1, val2]}}
+        rv[row_key] = {"mappings": {"PCA": [val1, val2]}}
+
+    # Load Shapes:
+    if len(shape_ids) > 0:
+        shapes = conn.getObjects("shape", shape_ids)
+        for shape in shapes:
+            row_key = str(shape.id)
+            vs = VitessceShape(shape._obj)
+            rv[row_key]['xy'] = vs.xy()
+            rv[row_key]['poly'] = vs.poly()
 
     return JsonResponse(rv)
