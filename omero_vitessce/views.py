@@ -143,7 +143,7 @@ def vitessce_cells(request, fileid, col1, col2, conn=None, **kwargs):
 
     "cell_1": {
         "mappings": {
-            "t-SNE": [-11.0776, 6.0311]
+            "PCA": [-11.0776, 6.0311]
         }
         "xy": [6824,26313],
         "poly": [

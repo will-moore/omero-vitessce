@@ -71,7 +71,7 @@
     <button id="plot_vitessce">Plot Vitessce</button>
     </p>
 
-    <iframe id="vitessce_frame"></iframe>
+    <!-- <iframe id="vitessce_frame"></iframe> -->
 
 
     <script>
@@ -104,7 +104,7 @@
                     ],
                         "coordinationSpace": {
                 "embeddingType": {
-                    "A": "UMAP"
+                    "A": "PCA"
                 }
             },
             "layout": [
@@ -127,7 +127,8 @@
         // http://beta.vitessce.io/index.html?url=data:,%7B%0A%20%20%22version%22%3A%20%221.0.0%22%2C%0A%20%20%22name%22%3A%20%22My%20example%20config%22%2C%0A%20%20%22datasets%22%3A%20%5B%0A%20%20%20%20%7B%0A%20%20%20%20%20%20%22uid%22%3A%20%22D1%22%2C%0A%20%20%20%20%20%20%22name%22%3A%20%22Dries%22%2C%0A%20%20%20%20%20%20%22files%22%3A%20%5B%0A%20%20%20%20%20%20%20%20%7B%0A%20%20%20%20%20%20%20%20%20%20%22url%22%3A%20%22http%3A%2F%2Flocalhost%3A4080%2Fwebgateway%2Ftable_vitessce_cells%2F50534%2FFeretX%2FFeretY%2F%22%2C%0A%20%20%20%20%20%20%20%20%20%20%22type%22%3A%20%22cells%22%2C%0A%20%20%20%20%20%20%20%20%20%20%22fileType%22%3A%20%22cells.json%22%0A%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%5D%0A%20%20%20%20%7D%0A%20%20%5D%2C%0A%20%20%22coordinationSpace%22%3A%20%7B%0A%20%20%20%20%22embeddingType%22%3A%20%7B%0A%20%20%20%20%20%20%22UMAP%22%3A%20%22UMAP%22%0A%20%20%20%20%7D%0A%20%20%7D%2C%0A%20%20%22layout%22%3A%20%5B%0A%20%20%20%20%7B%0A%20%20%20%20%20%20%22component%22%3A%20%22scatterplot%22%2C%0A%20%20%20%20%20%20%22coordinationScopes%22%3A%20%7B%0A%20%20%20%20%20%20%20%20%22embeddingType%22%3A%20%22UMAP%22%0A%20%20%20%20%20%20%7D%2C%0A%20%20%20%20%20%20%22x%22%3A%206%2C%0A%20%20%20%20%20%20%22y%22%3A%200%2C%0A%20%20%20%20%20%20%22w%22%3A%206%2C%0A%20%20%20%20%20%20%22h%22%3A%206%0A%20%20%20%20%7D%0A%20%20%5D%2C%0A%20%20%22initStrategy%22%3A%20%22auto%22%0A%7D
 
         console.log(url);
-        document.getElementById('vitessce_frame').src = url;
+        // document.getElementById('vitessce_frame').src = url;
+        window.open(url, '_blank');
     }
 
     document.getElementById("plot_vitessce").addEventListener(
