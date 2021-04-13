@@ -26,6 +26,9 @@ urlpatterns = [
 
     url(r'^table/(?P<file_id>[0-9]+)/$', views.omero_table, name="vitessce_omero_table"),
 
+    url(r"^vitessce_config/(?P<fileid>[0-9]+)/(?P<col1>[^/]+)/(?P<col2>[^/]+)/$",
+        views.vitessce_config, name="vitessce_config"),
+
     url(r"^table_vitessce_cells/(?P<fileid>[0-9]+)/(?P<col1>[^/]+)/(?P<col2>[^/]+)/$",
         views.vitessce_cells, name="vitessce_cells")
 ]

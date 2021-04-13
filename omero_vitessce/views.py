@@ -133,6 +133,106 @@ class VitessceShape():
 
 
 @login_required()
+def vitessce_config(request, fileid, col1, col2, conn=None, **kwargs):
+    """
+    Returns a Vitessce config that will load scatterplot data from
+    specified fileid (csv or table) and columns
+    """
+
+    index_url = request.build_absolute_uri(reverse('vitessce_index'))
+    cells_url = f'{index_url}table_vitessce_cells/{fileid}/{col1}/{col2}/'
+
+    desc = "Loading data from OMERO"
+    config = {
+        "name": "OMERO-Vitessce",
+        "description": desc,
+        "version": "1.0.0",
+        "initStrategy": "auto",
+        "datasets": [
+            {
+                "uid": "omero",
+                "name": "OMERO",
+                "files": [
+                    {
+                        "type": "cells",
+                        "fileType": "cells.json",
+                        "url": cells_url
+                    },
+                    {
+                        "type": "raster",
+                        "fileType": "raster.ome-zarr",
+                        "url": "https://s3.embassy.ebi.ac.uk/idr/zarr/v0.1/179706.zarr"
+                    }
+                ]
+            }
+        ],
+        "coordinationSpace": {
+            "embeddingType": {
+                "PCA": "PCA"
+            },
+            "spatialZoom": {
+                "A": -1
+            },
+            "spatialTargetX": {
+                "A": 500
+            },
+            "spatialTargetY": {
+                "A": 300
+            }
+        },
+        "layout": [
+            {
+                "component": "description",
+                "props": {
+                    "description": desc
+                },
+                "x": 0,
+                "y": 0,
+                "w": 2,
+                "h": 1
+            },
+            {
+                "component": "layerController",
+                "x": 0,
+                "y": 1,
+                "w": 2,
+                "h": 4
+            },
+            {
+                "component": "status",
+                "x": 0,
+                "y": 5,
+                "w": 2,
+                "h": 1
+            },
+            {
+                "component": "spatial",
+                "coordinationScopes": {
+                    "spatialZoom": "A",
+                    "spatialTargetX": "A",
+                    "spatialTargetY": "A"
+                },
+                "x": 2,
+                "y": 0,
+                "w": 5,
+                "h": 6
+            },
+            {
+                "component": "scatterplot",
+                "coordinationScopes": {
+                    "embeddingType": "PCA"
+                },
+                "x": 7,
+                "y": 0,
+                "w": 5,
+                "h": 6
+            }
+        ]
+    }
+    return JsonResponse(config)
+
+
+@login_required()
 def vitessce_cells(request, fileid, col1, col2, conn=None, **kwargs):
     """
     Return JSON for vitessce viewer cells.json based on a csv or OMERO.table
