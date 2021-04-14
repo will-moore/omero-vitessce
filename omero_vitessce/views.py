@@ -16,6 +16,11 @@
 #
 
 import pandas as pd
+import numpy as np
+import tempfile
+import zarr
+import os
+import json
 from shapely.geometry import Polygon
 from omero_marshal import get_encoder
 
@@ -24,8 +29,13 @@ from django.shortcuts import render
 from django.core.urlresolvers import reverse
 
 from omero.model import OriginalFileI
+from omero.model.enums import PixelsTypeint8, PixelsTypeuint8, PixelsTypeint16
+from omero.model.enums import PixelsTypeuint16, PixelsTypeint32
+from omero.model.enums import PixelsTypeuint32, PixelsTypefloat
+from omero.model.enums import PixelsTypecomplex, PixelsTypedouble
 from omeroweb.webclient.decorators import login_required
 from omeroweb.webgateway.views import _table_query
+from omeroweb.webgateway.marshal import channelMarshal
 
 
 # @login_required()
@@ -141,6 +151,13 @@ def vitessce_config(request, fileid, col1, col2, conn=None, **kwargs):
 
     index_url = request.build_absolute_uri(reverse('vitessce_index'))
     cells_url = f'{index_url}table_vitessce_cells/{fileid}/{col1}/{col2}/'
+    # zarr_url = request.build_absolute_uri(reverse('vitessce_zarr', args=["image"]))
+    # zarr_url = f"{zarr_url}/3676.zarr"
+    # zarr_url = "https://s3.embassy.ebi.ac.uk/idr/zarr/v0.1/179706.zarr"
+    # zarr_url = "http://localhost:8000/3676.zarr"
+    # zarr_url = "http://localhost:8080/image/3676.zarr"
+    zarr_url = request.build_absolute_uri(reverse('vitessce_index')) + 'zarr/3676.zarr'
+    # zarr_url = "https://minio-dev.openmicroscopy.org/idr/idr0077-valuchova-flowerlightsheet/zscale_01/9836831.zarr"
 
     desc = "Loading data from OMERO"
     config = {
@@ -161,7 +178,7 @@ def vitessce_config(request, fileid, col1, col2, conn=None, **kwargs):
                     {
                         "type": "raster",
                         "fileType": "raster.ome-zarr",
-                        "url": "https://s3.embassy.ebi.ac.uk/idr/zarr/v0.1/179706.zarr"
+                        "url": zarr_url
                     }
                 ]
             }
@@ -306,3 +323,99 @@ def vitessce_cells(request, fileid, col1, col2, conn=None, **kwargs):
             rv[row_key]['poly'] = vs.poly()
 
     return JsonResponse(rv)
+
+
+@login_required()
+def zarr_zattrs(request, iid, conn=None, **kwargs):
+
+    image = conn.getObject("Image", iid)
+
+    rv = {
+        "multiscales": [
+            {
+                "datasets": [
+                    {
+                        "path": "0"
+                    }
+                ],
+                "version": "0.1"
+            }
+        ],
+        "omero": {
+            "channels": [channelMarshal(x) for x in image.getChannels()],
+            "id": image.id,
+            "rdefs": {
+                "defaultT": image._re.getDefaultT(),
+                "defaultZ": image._re.getDefaultZ(),
+                "model": (image.isGreyscaleRenderingModel() and "greyscale" or "color"),
+            }
+        }
+    }
+    return JsonResponse(rv)
+
+
+def zarr_zgroup(request, **kwargs):
+    return JsonResponse({"zarr_format": 2})
+
+
+@login_required()
+def zarr_zarray(request, iid, level, conn=None, **kwargs):
+
+    image = conn.getObject("Image", iid)
+    shape = [getattr(image, 'getSize' + dim)() for dim in ('TCZYX')]
+    chunks = (1, 1, 1, shape[3], shape[4])
+
+    ptype = image.getPrimaryPixels().getPixelsType().getValue()
+    pixelTypes = {
+        PixelsTypeint8: np.int8,
+        PixelsTypeuint8: np.uint8,
+        PixelsTypeint16: np.int16,
+        PixelsTypeuint16: np.uint16,
+        PixelsTypeint32: np.int32,
+        PixelsTypeuint32: np.uint32,
+        PixelsTypefloat: np.float32,
+        PixelsTypedouble: np.float64
+    }
+    np_type = pixelTypes[ptype]
+
+    rsp = {"data": "fail"}
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # writes zarray
+        zarr.open_array(tmpdirname, mode='w', shape=tuple(shape), chunks=chunks, dtype=np_type)
+
+        # reads zarray
+        zattrs_path = os.path.join(tmpdirname, '.zarray')
+        with open(zattrs_path, 'r') as reader:
+            json_text = reader.read()
+            rsp = json.loads(json_text)
+
+    return JsonResponse(rsp)
+
+
+@login_required()
+def zarr_chunk(request, iid, level, t, c, z, y, x, conn=None, **kwargs):
+
+    x, y, z, c, t = [int(dim) for dim in (x, y, z, c, t)]
+
+    # NB: Assume that x and y are 0 and we are loading whole z, c, t plane
+    image = conn.getObject("Image", iid)
+    shape = [getattr(image, 'getSize' + dim)() for dim in ('TCZYX')]
+    chunks = (1, 1, 1, shape[3], shape[4])
+
+    plane = image.getPrimaryPixels().getPlane(z, c, t)
+    data = ""
+    chunk_name = ".".join([str(dim) for dim in [t, c, z, y, x]])
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # write chunk
+        zarr_array = zarr.open_array(tmpdirname, mode='w', shape=tuple(shape), chunks=chunks, dtype=plane.dtype)
+        zarr_array[t, c, z, :, :] = plane
+
+        # reads zarray
+        chunk_path = os.path.join(tmpdirname, chunk_name)
+        with open(chunk_path, 'rb') as reader:
+            data = reader.read()
+
+    rsp = HttpResponse(data)
+    rsp["Content-Length"] = len(data)
+    rsp["Content-Disposition"] = "attachment; filename=%s" % chunk_name
+    return rsp

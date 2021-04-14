@@ -30,5 +30,20 @@ urlpatterns = [
         views.vitessce_config, name="vitessce_config"),
 
     url(r"^table_vitessce_cells/(?P<fileid>[0-9]+)/(?P<col1>[^/]+)/(?P<col2>[^/]+)/$",
-        views.vitessce_cells, name="vitessce_cells")
+        views.vitessce_cells, name="vitessce_cells"),
+
+    # zarr
+    # url(r"^zarr/(?P<url>.+)", views.vitessce_zarr, name="vitessce_zarr")
+
+    url(r'^zarr/(?P<iid>[0-9]+).zarr/.zattrs$',
+        views.zarr_zattrs, name='vitessce_zarr_zattrs'),
+
+    url(r'^zarr/(?P<iid>[0-9]+).zarr/.zgroup$',
+        views.zarr_zgroup, name='vitessce_zarr_zgroup'),
+
+    url(r'^zarr/(?P<iid>[0-9]+).zarr/(?P<level>[0-9]+)/.zarray$',
+        views.zarr_zarray, name='vitessce_zarr_zarray'),
+
+    url(r'^zarr/(?P<iid>[0-9]+).zarr/(?P<level>[0-9]+)/(?P<t>[0-9]+).(?P<c>[0-9]+).(?P<z>[0-9]+).(?P<y>[0-9]+).(?P<x>[0-9]+)$',
+        views.zarr_chunk, name='vitessce_zarr'),
 ]
