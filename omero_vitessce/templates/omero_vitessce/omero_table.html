@@ -5,8 +5,10 @@
     <style>
         body {
             font-family: Arial;
+            margin: 0;
         }
         table {
+            margin: 15px;
             font-size: 11px;
             border-spacing: 0;
             border-collapse: collapse;
@@ -17,14 +19,19 @@
             white-space: nowrap;
         }
         iframe {
-            width: 1000px;
+            width: 100%;
             height: 650px;
+            border: none;
         }
         input[type='number'] {
             width: 80px;
         }
         p {
             margin-left: 15px;
+        }
+        .info {
+            color: grey;
+            margin-bottom: 10px;
         }
     </style>
 </head>
@@ -54,9 +61,13 @@
 
     </table>
 
-    <div style="display: flex;">
+    <div style="display: flex; margin: 15px;">
         <div>
             <p>
+                <div class="info">
+                    Choose 2 number columns from the table above.
+                    These will be used in a scatter plot in Vitessce.
+                </div>
                 X axis:
                 <select name="x_axis">
                     {% for col in columns %}            
@@ -80,6 +91,9 @@
                 </select>
             </p>
             <p>
+                <div class="info">
+                    An Image ID or OME-Zarr URL to display in Vitessce.
+                </div>
                 Image:
                 <input id="image_id" name="image" type="number" value="{{ image_id }}" />
 
@@ -92,12 +106,12 @@
         </div>
         <div style="position: relative">
             <p style="position: absolute; bottom: 0; width: 200px; margin-left: 15px;">
-                <button id="plot_vitessce">Plot Vitessce</button>
+                <button id="plot_vitessce">Open Vitessce</button>
             </p>
         </div>
     </div>
 
-    <!-- <iframe id="vitessce_frame"></iframe> -->
+    <iframe id="vitessce_frame"></iframe>
     <script>
 
     const webindex = "{% url 'webindex' %}";
@@ -119,8 +133,8 @@
 
 
         console.log(url);
-        // document.getElementById('vitessce_frame').src = url;
-        window.open(url, '_blank');
+        document.getElementById('vitessce_frame').src = url;
+        // window.open(url, '_blank');
     }
 
     // Handle 'submit'

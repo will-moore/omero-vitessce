@@ -44,7 +44,7 @@ def index(request, conn=None, **kwargs):
     OMERO Vitessce Home page 
     """
     return HttpResponse(
-        "To open an OMERO.table using it's File ID, go to /vitessce/table/ID"
+        "To open an OMERO.table or CSV using it's File ID, go to /vitessce/table/ID"
     )
 
 
