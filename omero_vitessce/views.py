@@ -100,21 +100,21 @@ def omero_table(request, file_id, conn=None, **kwargs):
 
     context = get_table_data(conn, file_id, sample_size=5)
     index_url = request.build_absolute_uri(reverse('vitessce_index'))
+
+    # look for Image ID in table data
+    col_names = [col["name"] for col in context["columns"]]
+    image_col = None
+    if "Image" in col_names:
+        image_col = col_names.index("Image")
+    elif "image_id" in col_names:
+        image_col = col_names.index("image_id")
+    if image_col is not None:
+        context["image_id"] = context["rows"][0][image_col]
+
     context['table_id'] = file_id
     context['index_url'] = index_url
     template = "omero_vitessce/omero_table.html"
     return render(request, template, context)
-
-
-# >>> polygon = Polygon([(0, 0), (1, 1), (1, 0)])
-# >>> polygon.area
-# 0.5
-# >>> polygon.length
-# 3.4142135623730949
-# Its x-y bounding box is a (minx, miny, maxx, maxy) tuple.
-
-# >>> polygon.bounds
-# (0.0, 0.0, 1.0, 1.0)
 
 
 class VitessceShape():
@@ -151,12 +151,19 @@ def vitessce_config(request, fileid, col1, col2, conn=None, **kwargs):
 
     index_url = request.build_absolute_uri(reverse('vitessce_index'))
     cells_url = f'{index_url}table_vitessce_cells/{fileid}/{col1}/{col2}/'
-    # zarr_url = request.build_absolute_uri(reverse('vitessce_zarr', args=["image"]))
-    # zarr_url = f"{zarr_url}/3676.zarr"
+
+    image_id = request.GET.get('image')
+    if image_id:
+        try:
+            image_id = int(image_id)
+            zarr_url = request.build_absolute_uri(reverse('vitessce_index')) + f'zarr/{image_id}.zarr'
+        except:
+            # user provided a URL to a zarr image
+            zarr_url = image_id
+
+    # Testing: s3 and minio images show channels in the layerController component
+    # but other URLs don't
     # zarr_url = "https://s3.embassy.ebi.ac.uk/idr/zarr/v0.1/179706.zarr"
-    # zarr_url = "http://localhost:8000/3676.zarr"
-    # zarr_url = "http://localhost:8080/image/3676.zarr"
-    zarr_url = request.build_absolute_uri(reverse('vitessce_index')) + 'zarr/3676.zarr'
     # zarr_url = "https://minio-dev.openmicroscopy.org/idr/idr0077-valuchova-flowerlightsheet/zscale_01/9836831.zarr"
 
     desc = "Loading data from OMERO"

@@ -3,8 +3,10 @@
 
 <head>
     <style>
-        table {
+        body {
             font-family: Arial;
+        }
+        table {
             font-size: 11px;
             border-spacing: 0;
             border-collapse: collapse;
@@ -17,6 +19,12 @@
         iframe {
             width: 1000px;
             height: 650px;
+        }
+        input[type='number'] {
+            width: 80px;
+        }
+        p {
+            margin-left: 15px;
         }
     </style>
 </head>
@@ -46,92 +54,76 @@
 
     </table>
 
-    <p>
-    X axis:
-    <select name="x_axis">
-        {% for col in columns %}            
-            {% ifequal col.type "number" %}
-            <option value="{{ col.name }}">
-                {{ col.name }}
-            </option>
-            {% endifequal %}
-        {% endfor %}
-    </select>
+    <div style="display: flex;">
+        <div>
+            <p>
+                X axis:
+                <select name="x_axis">
+                    {% for col in columns %}            
+                        {% ifequal col.type "number" %}
+                        <option value="{{ col.name }}">
+                            {{ col.name }}
+                        </option>
+                        {% endifequal %}
+                    {% endfor %}
+                </select>
 
-    Y axis:
-    <select name="y_axis">
-        {% for col in columns %}
-            {% ifequal col.type "number" %}
-            <option value="{{ col.name }}">
-                {{ col.name }}
-            </option>
-            {% endifequal %}
-        {% endfor %}
-    </select>
-    <button id="plot_vitessce">Plot Vitessce</button>
-    </p>
+                Y axis:
+                <select name="y_axis">
+                    {% for col in columns %}
+                        {% ifequal col.type "number" %}
+                        <option value="{{ col.name }}">
+                            {{ col.name }}
+                        </option>
+                        {% endifequal %}
+                    {% endfor %}
+                </select>
+            </p>
+            <p>
+                Image:
+                <input id="image_id" name="image" type="number" value="{{ image_id }}" />
+
+                <img id="thumbnail" style="max-width: 96px; max-height: 96px;"
+                    {% if image_id %}
+                        src="{% url 'render_thumbnail' image_id %}"
+                    {% endif %}
+                />
+            </p>
+        </div>
+        <div style="position: relative">
+            <p style="position: absolute; bottom: 0; width: 200px; margin-left: 15px;">
+                <button id="plot_vitessce">Plot Vitessce</button>
+            </p>
+        </div>
+    </div>
 
     <!-- <iframe id="vitessce_frame"></iframe> -->
-
-
     <script>
+
+    const webindex = "{% url 'webindex' %}";
 
     function plot_vitessce() {
         const x_axis = document.querySelector("select[name='x_axis']").value;
         const y_axis = document.querySelector("select[name='y_axis']").value;
+        const image_id = document.getElementById("image_id").value;
         console.log('xy', x_axis, y_axis);
 
         const index_url = "{{ index_url }}";
         const file_id = "{{ table_id }}";
-        const config_url = `${index_url}vitessce_config/${file_id}/${x_axis}/${y_axis}/`;
-        // console.log('cells_url', cells_url);
+        let config_url = `${index_url}vitessce_config/${file_id}/${x_axis}/${y_axis}/`;
+        if (image_id) {
+            config_url = config_url + `?image=${image_id}`;
+        }
 
-        // var config = {
-        //     "version": "1.0.0",
-        //         "name": "OMERO-vitessce",
-        //             "datasets": [
-        //                 {
-        //                     "uid": "D1",
-        //                     "name": "Dries",
-        //                     "files": [
-        //                         {
-        //                             "url": cells_url,
-        //                             "type": "cells",
-        //                             "fileType": "cells.json"
-        //                         }
-        //                     ]
-        //                 }
-        //             ],
-        //                 "coordinationSpace": {
-        //         "embeddingType": {
-        //             "A": "PCA"
-        //         }
-        //     },
-        //     "layout": [
-        //         {
-        //             "component": "scatterplot",
-        //             "coordinationScopes": {
-        //                 "embeddingType": "A"
-        //             },
-        //             "x": 0,
-        //             "y": 0,
-        //             "w": 12,
-        //             "h": 6
-        //         }
-        //     ],
-        //     "initStrategy": "auto"
-        // }
+        const url = `http://vitessce.io/index.html?url=${config_url}`;
 
-        // const encoded_config = encodeURI(JSON.stringify(config));
-        // const url = `http://vitessce.io/index.html?url=data:,${encoded_config}`
-        const url = `http://vitessce.io/index.html?url=${config_url}`
-        // http://beta.vitessce.io/index.html?url=data:,%7B%0A%20%20%22version%22%3A%20%221.0.0%22%2C%0A%20%20%22name%22%3A%20%22My%20example%20config%22%2C%0A%20%20%22datasets%22%3A%20%5B%0A%20%20%20%20%7B%0A%20%20%20%20%20%20%22uid%22%3A%20%22D1%22%2C%0A%20%20%20%20%20%20%22name%22%3A%20%22Dries%22%2C%0A%20%20%20%20%20%20%22files%22%3A%20%5B%0A%20%20%20%20%20%20%20%20%7B%0A%20%20%20%20%20%20%20%20%20%20%22url%22%3A%20%22http%3A%2F%2Flocalhost%3A4080%2Fwebgateway%2Ftable_vitessce_cells%2F50534%2FFeretX%2FFeretY%2F%22%2C%0A%20%20%20%20%20%20%20%20%20%20%22type%22%3A%20%22cells%22%2C%0A%20%20%20%20%20%20%20%20%20%20%22fileType%22%3A%20%22cells.json%22%0A%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%5D%0A%20%20%20%20%7D%0A%20%20%5D%2C%0A%20%20%22coordinationSpace%22%3A%20%7B%0A%20%20%20%20%22embeddingType%22%3A%20%7B%0A%20%20%20%20%20%20%22UMAP%22%3A%20%22UMAP%22%0A%20%20%20%20%7D%0A%20%20%7D%2C%0A%20%20%22layout%22%3A%20%5B%0A%20%20%20%20%7B%0A%20%20%20%20%20%20%22component%22%3A%20%22scatterplot%22%2C%0A%20%20%20%20%20%20%22coordinationScopes%22%3A%20%7B%0A%20%20%20%20%20%20%20%20%22embeddingType%22%3A%20%22UMAP%22%0A%20%20%20%20%20%20%7D%2C%0A%20%20%20%20%20%20%22x%22%3A%206%2C%0A%20%20%20%20%20%20%22y%22%3A%200%2C%0A%20%20%20%20%20%20%22w%22%3A%206%2C%0A%20%20%20%20%20%20%22h%22%3A%206%0A%20%20%20%20%7D%0A%20%20%5D%2C%0A%20%20%22initStrategy%22%3A%20%22auto%22%0A%7D
 
         console.log(url);
         // document.getElementById('vitessce_frame').src = url;
         window.open(url, '_blank');
     }
 
+    // Handle 'submit'
     document.getElementById("plot_vitessce").addEventListener(
         "click",
         (event) => {
@@ -139,6 +131,17 @@
             plot_vitessce();
         }
     )
+
+    // When Image ID changes, update thumbnail
+    document.getElementById("image_id").addEventListener(
+        "change",
+        (event) => {
+            const iid = event.target.value;
+            const imgSrc = `${ webindex }render_thumbnail/${ iid }/`;
+            document.getElementById("thumbnail").src = imgSrc;
+        }
+    )
+
     </script>
 </body>
 </html>
