@@ -305,6 +305,8 @@ def vitessce_cells(request, fileid, col1, col2, conn=None, **kwargs):
     id_column = None
     if "shape_id" in col_names:
         id_column = col_names.index("shape_id")
+    elif "Shape" in col_names:
+        id_column = col_names.index("Shape")
 
     rv = {}
 
