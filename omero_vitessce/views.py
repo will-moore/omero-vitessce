@@ -28,6 +28,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.core.urlresolvers import reverse
 
+import omero
 from omero.model import OriginalFileI
 from omero.model.enums import PixelsTypeint8, PixelsTypeuint8, PixelsTypeint16
 from omero.model.enums import PixelsTypeuint16, PixelsTypeint32
@@ -108,8 +109,18 @@ def omero_table(request, file_id, conn=None, **kwargs):
         image_col = col_names.index("Image")
     elif "image_id" in col_names:
         image_col = col_names.index("image_id")
+
     if image_col is not None:
         context["image_id"] = context["rows"][0][image_col]
+    else:
+        # If the table doesn't have Image column, check for Image linked to file-annotation
+        params = omero.sys.ParametersI()
+        params.addId(file_id)
+        query = """select ann from Annotation ann where ann.file.id=:id"""
+        file_anns = conn.getQueryService().findAllByQuery(query, params, conn.SERVICE_OPTS)
+        if len(file_anns) > 0:
+            for link in conn.getAnnotationLinks('Image', ann_ids=[file_anns[0].id.val]):
+                context["image_id"] = link.parent.id.val
 
     context['table_id'] = file_id
     context['index_url'] = index_url
