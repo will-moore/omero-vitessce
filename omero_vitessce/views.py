@@ -38,6 +38,7 @@ from omeroweb.webclient.decorators import login_required
 from omeroweb.webgateway.views import _table_query
 from omeroweb.webgateway.marshal import channelMarshal
 
+TILE_SIZE = 1024
 
 # @login_required()
 def index(request, conn=None, **kwargs):
@@ -378,12 +379,21 @@ def zarr_zgroup(request, **kwargs):
     return JsonResponse({"zarr_format": 2})
 
 
+def get_chunk_shape(image_shape):
+    # If image is small, could have chunk as whole plane
+    chunks = [1, 1, 1, image_shape[3], image_shape[4]]
+    # For big images...
+    chunks = [1, 1, 1, TILE_SIZE, TILE_SIZE]
+    return chunks
+
+
 @login_required()
 def zarr_zarray(request, iid, level, conn=None, **kwargs):
 
     image = conn.getObject("Image", iid)
     shape = [getattr(image, 'getSize' + dim)() for dim in ('TCZYX')]
-    chunks = (1, 1, 1, shape[3], shape[4])
+
+    chunks = get_chunk_shape(shape)
 
     ptype = image.getPrimaryPixels().getPixelsType().getValue()
     pixelTypes = {
@@ -400,8 +410,8 @@ def zarr_zarray(request, iid, level, conn=None, **kwargs):
 
     rsp = {"data": "fail"}
     with tempfile.TemporaryDirectory() as tmpdirname:
-        # writes zarray
-        zarr.open_array(tmpdirname, mode='w', shape=tuple(shape), chunks=chunks, dtype=np_type)
+        # creates EMPTY zarray, but it's all we need to write .zarray
+        zarr.open_array(tmpdirname, mode='w', shape=shape, chunks=chunks, dtype=np_type)
 
         # reads zarray
         zattrs_path = os.path.join(tmpdirname, '.zarray')
@@ -417,24 +427,37 @@ def zarr_chunk(request, iid, level, t, c, z, y, x, conn=None, **kwargs):
 
     x, y, z, c, t = [int(dim) for dim in (x, y, z, c, t)]
 
-    # NB: Assume that x and y are 0 and we are loading whole z, c, t plane
     image = conn.getObject("Image", iid)
     shape = [getattr(image, 'getSize' + dim)() for dim in ('TCZYX')]
-    chunks = (1, 1, 1, shape[3], shape[4])
+    chunks = get_chunk_shape(shape)
+    tile_w = chunks[-1]
+    tile_h = chunks[-2]
+    tile_x = x * tile_w
+    tile_y = y * tile_h
+    # edge tiles might be truncated
+    tile_w = min(shape[-1] - tile_x, tile_w)
+    tile_h = min(shape[-2] - tile_y, tile_h)
+    tile = [tile_x, tile_y, tile_w, tile_h]
 
-    plane = image.getPrimaryPixels().getPlane(z, c, t)
+    plane = image.getPrimaryPixels().getTile(z, c, t, tile)
+    # pad incomplete chunk to full chunk size
+    if chunks[-1] != tile_w or chunks[-2] != tile_h:
+        plane2 = np.zeros((chunks[-2], chunks[-1]), dtype=plane.dtype)
+        plane2[0:tile_h, 0:tile_w] = plane
+        plane = plane2
+
     data = ""
-    chunk_name = ".".join([str(dim) for dim in [t, c, z, y, x]])
     with tempfile.TemporaryDirectory() as tmpdirname:
-        # write chunk
-        zarr_array = zarr.open_array(tmpdirname, mode='w', shape=tuple(shape), chunks=chunks, dtype=plane.dtype)
-        zarr_array[t, c, z, :, :] = plane
+        # write single chunk to array of same shape
+        zarr_array = zarr.open_array(tmpdirname, mode='w', shape=chunks, chunks=chunks, dtype=plane.dtype)
+        zarr_array[0, 0, 0, :, :] = plane
 
         # reads zarray
-        chunk_path = os.path.join(tmpdirname, chunk_name)
+        chunk_path = os.path.join(tmpdirname, "0.0.0.0.0")
         with open(chunk_path, 'rb') as reader:
             data = reader.read()
 
+    chunk_name = ".".join([str(dim) for dim in [t, c, z, y, x]])
     rsp = HttpResponse(data)
     rsp["Content-Length"] = len(data)
     rsp["Content-Disposition"] = "attachment; filename=%s" % chunk_name
