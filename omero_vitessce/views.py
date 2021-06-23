@@ -35,10 +35,8 @@ from omero.model.enums import PixelsTypeuint16, PixelsTypeint32
 from omero.model.enums import PixelsTypeuint32, PixelsTypefloat
 from omero.model.enums import PixelsTypecomplex, PixelsTypedouble
 from omeroweb.webclient.decorators import login_required
-from omeroweb.webgateway.views import _table_query
 from omeroweb.webgateway.marshal import channelMarshal
 
-TILE_SIZE = 1024
 
 # @login_required()
 def index(request, conn=None, **kwargs):
@@ -351,14 +349,19 @@ def zarr_zattrs(request, iid, conn=None, **kwargs):
 
     image = conn.getObject("Image", iid)
 
+    levels = [0]
+    if image.requiresPixelsPyramid():
+        # init the rendering engine
+        image.getZoomLevelScaling()
+        res_descs = image._re.getResolutionDescriptions()
+        levels = range(len(res_descs))
+
+    datasets = [{"path": str(level)} for level in levels]
+
     rv = {
         "multiscales": [
             {
-                "datasets": [
-                    {
-                        "path": "0"
-                    }
-                ],
+                "datasets": datasets,
                 "version": "0.1"
             }
         ],
@@ -379,21 +382,41 @@ def zarr_zgroup(request, **kwargs):
     return JsonResponse({"zarr_format": 2})
 
 
-def get_chunk_shape(image_shape):
-    # If image is small, could have chunk as whole plane
-    chunks = [1, 1, 1, image_shape[3], image_shape[4]]
-    # For big images...
-    chunks = [1, 1, 1, TILE_SIZE, TILE_SIZE]
+def get_image_shape(image, level):
+
+    shape = [getattr(image, 'getSize' + dim)() for dim in ('TCZYX')]
+    # For down-sampled levels of pyramid, get shape
+    if image.requiresPixelsPyramid() and level > 0:
+        # init the rendering engine
+        image.getZoomLevelScaling()
+        levels = image._re.getResolutionDescriptions()
+        if level >= len(levels):
+            raise Exception(
+                "Level %s higher than %s levels for this image" % (level, len(levels)))
+        shape[-1] = levels[level].sizeX
+        shape[-2] = levels[level].sizeY
+    return shape
+
+
+def get_chunk_shape(image):
+    if image.requiresPixelsPyramid():
+        # For big images...
+        image.getZoomLevelScaling()
+        width, height = image._re.getTileSize()
+        chunks = [1, 1, 1, height, width]
+    else:
+        # If image is small, could have chunk as whole plane
+        chunks = [1, 1, 1, image.getSizeY(), image.getSizeX()]
     return chunks
 
 
 @login_required()
 def zarr_zarray(request, iid, level, conn=None, **kwargs):
 
+    level = int(level)
     image = conn.getObject("Image", iid)
-    shape = [getattr(image, 'getSize' + dim)() for dim in ('TCZYX')]
-
-    chunks = get_chunk_shape(shape)
+    shape = get_image_shape(image, level)
+    chunks = get_chunk_shape(image)
 
     ptype = image.getPrimaryPixels().getPixelsType().getValue()
     pixelTypes = {
@@ -425,11 +448,12 @@ def zarr_zarray(request, iid, level, conn=None, **kwargs):
 @login_required()
 def zarr_chunk(request, iid, level, t, c, z, y, x, conn=None, **kwargs):
 
-    x, y, z, c, t = [int(dim) for dim in (x, y, z, c, t)]
+    x, y, z, c, t, level = [int(dim) for dim in (x, y, z, c, t, level)]
 
     image = conn.getObject("Image", iid)
-    shape = [getattr(image, 'getSize' + dim)() for dim in ('TCZYX')]
-    chunks = get_chunk_shape(shape)
+    shape = get_image_shape(image, level)
+    chunks = get_chunk_shape(image)
+
     tile_w = chunks[-1]
     tile_h = chunks[-2]
     tile_x = x * tile_w
@@ -439,7 +463,26 @@ def zarr_chunk(request, iid, level, t, c, z, y, x, conn=None, **kwargs):
     tile_h = min(shape[-2] - tile_y, tile_h)
     tile = [tile_x, tile_y, tile_w, tile_h]
 
-    plane = image.getPrimaryPixels().getTile(z, c, t, tile)
+    # For tiled images, set Resolution...
+    if image.requiresPixelsPyramid() and level > 0:
+        # pixels.setResolutionLevel(level)
+        pix = image._conn.c.sf.createRawPixelsStore()
+        pid = image.getPixelsId()
+        try:
+            # Need to invert the level...
+            max_level = len(image.getZoomLevelScaling()) - 1
+            # level 0 is smallest
+            level = max_level - level
+            pix.setPixelsId(pid, False)
+            pix.setResolutionLevel(level)
+            tile = pix.getTile(z, c, t, tile_x, tile_y, tile_w, tile_h)
+        finally:
+            pix.close()
+
+        tile = np.frombuffer(tile, dtype=np.uint8)
+        plane = tile.reshape((tile_h, tile_w))
+    else:
+        plane = image.getPrimaryPixels().getTile(z, c, t, tile)
     # pad incomplete chunk to full chunk size
     if chunks[-1] != tile_w or chunks[-2] != tile_h:
         plane2 = np.zeros((chunks[-2], chunks[-1]), dtype=plane.dtype)
@@ -452,7 +495,7 @@ def zarr_chunk(request, iid, level, t, c, z, y, x, conn=None, **kwargs):
         zarr_array = zarr.open_array(tmpdirname, mode='w', shape=chunks, chunks=chunks, dtype=plane.dtype)
         zarr_array[0, 0, 0, :, :] = plane
 
-        # reads zarray
+        # reads chunk
         chunk_path = os.path.join(tmpdirname, "0.0.0.0.0")
         with open(chunk_path, 'rb') as reader:
             data = reader.read()
